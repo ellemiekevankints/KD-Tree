@@ -8,13 +8,13 @@ template<typename T>
 KDTree<T>::KDTree() {}
 
 template<typename T>
-KDTree<T>::KDTree(ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::Feature<T>>> _points, bool _copyData) {
-    build(_points, _copyData);
+KDTree<T>::KDTree(ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::Feature<T>>> _points) {
+    build(_points);
 }
 
 template<typename T>
-KDTree<T>::KDTree(ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::Feature<T>>> _points, vector<T> _labels, bool _copyData) {
-    build(_points, _labels, _copyData);
+KDTree<T>::KDTree(ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::Feature<T>>> _points, vector<T> _labels) {
+    build(_points, _labels);
 }
 
 struct SubTree {
@@ -88,13 +88,13 @@ static void computeSums(ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::Feature<T>>> po
 } // computeSums
 
 template<typename T>
-void KDTree<T>::build(ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::Feature<T>>> _points, bool _copyData) {
+void KDTree<T>::build(ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::Feature<T>>> _points) {
     vector<int> labels;
-    build(_points, labels, _copyData);
+    build(_points, labels);
 } // build
 
 template<typename T>
-void KDTree<T>::build(ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::Feature<T>>> _points, vector<int> _labels, bool _copyData) {
+void KDTree<T>::build(ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::Feature<T>>> _points, vector<int> _labels) {
 
     if (_points->size() == 0) {
         logger.err<<"ERROR: number of features in image must be greater than zero"<<"\n";
@@ -102,15 +102,7 @@ void KDTree<T>::build(ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::Feature<T>>> _poi
     
     // initilize nodes of KD Tree
     vector<KDTree::Node>().swap(nodes);
-
-    if( !_copyData )
-        points = _points;
-    else {
-        // delete contents and free up memory
-        //points->clear();
-        // create new vector
-        //points->resize(_points->size()); ERROR HERE !!!!!!!!!!!!!!!!!!!!!!!
-    }
+    points = _points;
 
     int i, j, n = _points->size(), top = 0;
     const unsigned char *data = _points->host->descriptor.values;
@@ -118,9 +110,7 @@ void KDTree<T>::build(ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::Feature<T>>> _poi
 
     // size of object in memory 
     size_t step = sizeof(ssrlcv::Feature<T>);
-    size_t dstep = sizeof(ssrlcv::Feature<T>); 
 
-    int ptpos = 0;
     labels.resize(n); // labels and points array will share same size 
     const int *_labels_data = 0;
 
@@ -156,14 +146,9 @@ void KDTree<T>::build(ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::Feature<T>>> _poi
 
         if(count == 1) {
             int idx0 = (int)(ptofs[first]/step);
-            int idx = _copyData ? ptpos++ : idx0; // the dimension
+            int idx = idx0; // the dimension
             nodes[nidx].idx = ~idx;
-            if( _copyData ) {
-                const unsigned char *src = data + ptofs[first]; 
-                unsigned char *dst = dstdata + idx*dstep; 
-                for( j = 0; j < K; j++ )
-                    dst[j] = src[j];
-            }
+            
             labels[idx] = _labels_data ? _labels_data[idx0] : idx0;
             _maxDepth = std::max(_maxDepth, depth);
             continue;

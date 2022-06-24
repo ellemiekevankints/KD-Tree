@@ -52,7 +52,7 @@
 using namespace std;
 
 const int K = 128; // dimensions
-const int N = 100; // number of features
+const int N = 20; // number of features
 const int MAX_TREE_DEPTH = 32; // upper bound for tree level, equivalent to 4 billion generated features 
 
 /****************
@@ -107,12 +107,12 @@ public:
 
     // constructors
     KDTree();
-    KDTree(ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::Feature<T>>> points, bool copyAndReorderPoints = false);
-    KDTree(ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::Feature<T>>> points, vector<T> _labels, bool copyAndReorderPoints = false);
+    KDTree(ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::Feature<T>>> points);
+    KDTree(ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::Feature<T>>> points, vector<T> _labels);
     
     // builds the search tree
-    void build(ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::Feature<T>>> points, bool copyAndReorderPoints = false);
-    void build(ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::Feature<T>>> points, vector<int> labels, bool copyAndReorderPoints = false);
+    void build(ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::Feature<T>>> points);
+    void build(ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::Feature<T>>> points, vector<int> labels);
     
     // finds the K nearest neighbors of "feature" while looking at emax (at most) leaves
     DMatch findNearest(KDTree<T> kdtree, ssrlcv::Feature<T> queryFeature, int k, int emax) const;
