@@ -40,10 +40,18 @@
 #ifndef KDTREE_CUH
 #define KDTREE_CUH
 
+#ifdef __CUDACC__
+#define CUDA_CALLABLE_MEMBER __host__ __device__
+#else
+#define CUDA_CALLABLE_MEMBER
+#endif 
+
 #include <vector>
 #include <algorithm>
 #include <cstdio>
 #include <iostream>
+#include <thrust/host_vector.h>
+#include <thrust/device_vector.h>
 
 #include "Feature.cuh"
 #include "Logger.hpp"
@@ -60,6 +68,8 @@ namespace ssrlcv {
     /****************************************
     * BELOW STRUCTS BELONG IN MATCH FACTORY *
     *****************************************/
+
+    // delete below code when transfering to SSRLCV
 
 /* ************************************************************************************************************************************************************************************************************************************************************************** */
 
@@ -126,12 +136,14 @@ namespace ssrlcv {
 /* ************************************************************************************************************************************************************************************************************************************************************************** */
 
     /****************
-    * KD TREE CLASS *
+    * KD-TREE CLASS *
     *****************/
+
     template <typename T>
     class KDTree {
 
     public: 
+        
         // the node of the search tree.
         struct Node {
             Node() : idx(-1), left(-1), right(-1), boundary(0.f) {}
@@ -146,14 +158,6 @@ namespace ssrlcv {
             float boundary;
         };
 
-        // priority queue used to search the tree
-        struct PQueueElem {
-            PQueueElem() : dist(0), idx(0) {}
-            PQueueElem(float _dist, int _idx) : dist(_dist), idx(_idx) {}
-            float dist; // distance of the query point from the node
-            int idx; // current tree position
-        };
-
         // constructors
         KDTree();
         KDTree(ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::Feature<T>>> points);
@@ -162,27 +166,36 @@ namespace ssrlcv {
         // builds the search tree
         void build(ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::Feature<T>>> points);
         void build(ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::Feature<T>>> points, vector<int> labels);
-    
-        // finds the K nearest neighbors of "feature" while looking at emax (at most) leaves
-        // will need to change this to return a float 
-        DMatch findNearest(KDTree<T> kdtree, ssrlcv::Feature<T> queryFeature, int k, int emax) const;
 
-        // return a vector with the specified index
+        // return a point with the specified index
         const float2 getPoint(int ptidx, int *label = 0) const;
 
         // print the kd tree
         void printKDTree();
 
-        vector<Node> nodes; // all the tree nodes
+        thrust::host_vector<Node> nodes; // all the tree nodes
         ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::Feature<T>>> points; // all the points 
         vector<int> labels; // the parallel array of labels
         int maxDepth;
 
     }; // KD Tree class
 
+    /************************
+    * PRIORITY QUEUE STRUCT *
+    *************************/
+
+    // priority queue used to search the tree
+    struct PQueueElem {
+        CUDA_CALLABLE_MEMBER PQueueElem() : dist(0), idx(0) {}
+        CUDA_CALLABLE_MEMBER PQueueElem(float _dist, int _idx) : dist(_dist), idx(_idx) {}
+        float dist; // distance of the query point from the node
+        int idx; // current tree position
+    };
+
     /********************
     * AUTO BUFFER CLASS *
     *********************/
+
     template<typename _Tp, size_t fixed_size = 1024/sizeof(_Tp)+8> 
     class AutoBuffer {
 
@@ -222,6 +235,7 @@ namespace ssrlcv {
     /*****************************
     * AUTO BUFFER IMPLEMENTATION *
     ******************************/
+
     template<typename _Tp, size_t fixed_size> inline
     AutoBuffer<_Tp, fixed_size>::AutoBuffer() {
         ptr = buf;
@@ -270,31 +284,50 @@ namespace ssrlcv {
             sz = fixed_size;
         }
     }
+  
+    // put the code below in MatchFactroy.cu
 
 /* ************************************************************************************************************************************************************************************************************************************************************************** */
+
+    /*
+     * \brief finds the k nearest neighbors to a point while looking at emax (at most) leaves
+     * \param kdtree the KD-Tree to search through
+     * \param queryFeature the query feature point
+     * \param emax the max number of leaf nodes to search. a value closer to the total number feature points correleates to a higher accuracy macth
+     * \param absoluteThreshold the maximum distance between two matched points
+     * \param k the number of nearest neighbors 
+    */ 
+    template<typename T> 
+    __device__ DMatch findNearest(ssrlcv::KDTree<T>* kdtree, typename KDTree<T>::Node* nodes, ssrlcv::Feature<T>* treeFeatures, ssrlcv::PQueueElem* pqueue, int* idx, float* dist, 
+    ssrlcv::Feature<T> queryFeature, int emax, float absoluteThreshold, int k = 1);
 
     template<typename T>    
     class MatchFactory {
         private:
             ssrlcv::ptr::value<Unity<Feature<T>>> seedFeatures;
         public:
+            float absoluteThreshold;
+            float relativeThreshold;
             MatchFactory(float relativeThreshold, float absoluteThreshold);
             void validateMatches(ssrlcv::ptr::value<ssrlcv::Unity<DMatch>> matches); 
-            ssrlcv::ptr::value<ssrlcv::Unity<DMatch>> generateDistanceMatches(int targetID, ssrlcv::KDTree<T> kdtree, int queryID, ssrlcv::ptr::value<Unity<Feature<T>>> queryFeatures, ssrlcv::ptr::value<ssrlcv::Unity<float>> seedDistances);
+            ssrlcv::ptr::value<ssrlcv::Unity<DMatch>> generateDistanceMatches(int queryID, ssrlcv::ptr::value<Unity<Feature<T>>> queryFeatures, int targetID,
+            ssrlcv::KDTree<T> kdtree, ssrlcv::ptr::value<ssrlcv::Unity<float>> seedDistances);
     }; // MatchFactory class
 
     template<typename T>
-    __global__ void matchFeaturesKDTree(unsigned int queryImageID, unsigned long numFeaturesQuery,
-        Feature<T>* featuresQuery, unsigned int targetImageID, unsigned long numFeaturesTarget,
-        Feature<T>* featuresTarget, DMatch* matches, float absoluteThreshold);
+    __global__ void matchFeaturesKDTree(unsigned int queryImageID, unsigned long numFeaturesQuery, Feature<T>* featuresQuery, 
+    unsigned int targetImageID, unsigned long numFeaturesTarget, KDTree<T>* kdtree, typename KDTree<T>::Node* nodes, ssrlcv::Feature<T>* treeFeatures, ssrlcv::PQueueElem* pqueue, int* idx, float* dist, DMatch* matches, float absoluteThreshold);
 
-    __global__ void matchFeaturesKDTree(unsigned int queryImageID, unsigned long numFeaturesQuery,
-        Feature<T>* featuresQuery, unsigned int targetImageID, unsigned long numFeaturesTarget,
-        Feature<T>* featuresTarget, DMatch* matches, float* seedDistances, float relativeThreshold, float absoluteThreshold);
+    // __global__ void matchFeaturesKDTree(unsigned int queryImageID, unsigned long numFeaturesQuery,
+    //     Feature<T>* featuresQuery, unsigned int targetImageID, unsigned long numFeaturesTarget,
+    //     KDTree<T>* kdtree, DMatch* matches, float* seedDistances, float relativeThreshold, float absoluteThreshold);
 
 /* ************************************************************************************************************************************************************************************************************************************************************************** */
 
 } // namepsace ssrlcv
+
+
+// delete below code when transfering to SSRLCV
 
 void getGrid(unsigned long numElements, dim3 &grid, int device = 0){
   cudaDeviceProp prop;

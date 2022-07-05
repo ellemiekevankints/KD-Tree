@@ -1207,7 +1207,8 @@ namespace ssrlcv{
   /**
   * \}
   */
-}
+
+} // namespace ssrlcv
 
 
 #endif /*UNITY_CUH*/

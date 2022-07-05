@@ -1,0 +1,20 @@
+src/Logger.hpp:1:9: warning: #pragma once in main file
+ #pragma once
+         ^~~~
+src/Logger.cpp: In member function ‘ssrlcv::Logger& ssrlcv::Logger::operator<<(const char*)’:
+src/Logger.cpp:115:1: warning: no return statement in function returning non-void [-Wreturn-type]
+ }
+ ^
+src/KDTree.cu(570): warning: dynamic initialization in unreachable code
+
+src/KDTree.cu(172): warning: dynamic initialization in unreachable code
+          detected during:
+            instantiation of "void ssrlcv::KDTree<T>::build(ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::Feature<T>>>) [with T=ssrlcv::SIFT_Descriptor]" 
+(12): here
+            instantiation of "ssrlcv::KDTree<T>::KDTree(ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::Feature<T>>>) [with T=ssrlcv::SIFT_Descriptor]" 
+(565): here
+
+src/KDTree.cu(172): warning: dynamic initialization in unreachable code
+
+src/KDTree.cu(570): warning: dynamic initialization in unreachable code
+
