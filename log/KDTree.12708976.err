@@ -1,7 +1,0 @@
-src/Logger.hpp:1:9: warning: #pragma once in main file
- #pragma once
-         ^~~~
-src/Logger.cpp: In member function ‘ssrlcv::Logger& ssrlcv::Logger::operator<<(const char*)’:
-src/Logger.cpp:115:1: warning: no return statement in function returning non-void [-Wreturn-type]
- }
- ^
