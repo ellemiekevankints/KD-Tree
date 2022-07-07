@@ -192,7 +192,7 @@ void ssrlcv::KDTree<T>::build(ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::Feature<T
 // in High-Dimensional Spaces. In Proc. IEEE Conf. Comp. Vision Patt. Recog.,
 // pages 1000--1006, 1997. https://www.cs.ubc.ca/~lowe/papers/cvpr97.pdf
 template<typename T> 
-__device__ ssrlcv::DMatch ssrlcv::findNearest(ssrlcv::KDTree<T>* kdtree, typename KDTree<T>::Node* nodes, ssrlcv::Feature<T>* featuresTree, ssrlcv::PQueueElem* pqueue, int* idx, float* dist, 
+__device__ ssrlcv::DMatch ssrlcv::findNearest(ssrlcv::KDTree<T>* kdtree, typename KDTree<T>::Node* nodes, ssrlcv::Feature<T>* featuresTree, ssrlcv::PQueueElem* pqueue, 
 ssrlcv::Feature<T> feature, int emax, float absoluteThreshold, int k) {
 
     T desc = feature.descriptor;
@@ -201,18 +201,24 @@ ssrlcv::Feature<T> feature, int emax, float absoluteThreshold, int k) {
     int i, j, ncount = 0, e = 0;
     int qsize = 0, maxqsize = 1 << 10;
 
+    int idx[2]; // holds the node indice
+    float dist[2]; // holds the euclidean distances
+
     for (e = 0; e < emax;) {
         float d, alt_d = 0.f; 
         int nidx; // node index
-
-        if (e == 0)
-            nidx = 0;
+        
+        if (e == 0) { 
+            nidx = 0; 
+            //printf("\n\nSUCCESS\n\n"); //this statement is reached
+        } 
         else {
             // take the next node from the priority queue
-            if (qsize == 0)
-                break;
+            printf("\n\nSUCCESS\n\n"); //this one is not
+            if (qsize == 0) { break; }
             nidx = pqueue[0].idx; // current tree position
             alt_d = pqueue[0].dist; // distance of the query point from the node
+            
             if (--qsize > 0) {
                 
                 // std::swap(pqueue[0], pqueue[qsize]);
@@ -376,40 +382,33 @@ void ssrlcv::MatchFactory<T>::validateMatches(ssrlcv::ptr::value<ssrlcv::Unity<s
 
   matches->setData(validatedMatches_device,numMatchesLeft,gpu);
 
-  if(origin != gpu) matches->setMemoryState(origin);
+  if (origin != gpu) matches->setMemoryState(origin);
 } // validateMatches
 
 // move to MatchFactory
 template<typename T>
-ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::DMatch>> ssrlcv::MatchFactory<T>::generateDistanceMatches(int queryID, ssrlcv::ptr::value<ssrlcv::Unity<Feature<T>>> queryFeatures, 
-int targetID, ssrlcv::KDTree<T> kdtree, ssrlcv::ptr::value<ssrlcv::Unity<float>> seedDistances) {
+ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::DMatch>> ssrlcv::MatchFactory<T>::generateDistanceMatches(int queryID, ssrlcv::ptr::value<ssrlcv::Unity<Feature<T>>> queryFeatures, int targetID, ssrlcv::KDTree<T> kdtree) {
   
   // transfer query points to GPU
   MemoryState q_origin = queryFeatures->getMemoryState();
   if(q_origin != gpu) queryFeatures->setMemoryState(gpu);
+
+  // transfer KD-Tree to GPU
+  ssrlcv::ptr::device<ssrlcv::KDTree<T>> d_kdtree(1);
+  CudaSafeCall(cudaMemcpy(d_kdtree.get(),&kdtree,sizeof(kdtree),cudaMemcpyHostToDevice));
     
   // transfer KD-Tree points to GPU
   ssrlcv::ptr::value<ssrlcv::Unity<Feature<T>>> d_points = kdtree.points; 
   MemoryState t_origin = d_points->getMemoryState();
   if(t_origin != gpu) d_points->setMemoryState(gpu); 
 
-  // transfer KD-Tree to GPU
-  ssrlcv::ptr::device<ssrlcv::KDTree<T>> d_kdtree(1);
-  CudaSafeCall(cudaMemcpy(d_kdtree.get(),&kdtree,sizeof(kdtree),cudaMemcpyHostToDevice));
-
   // transfer KD-Tree nodes to GPU
   thrust::device_vector<typename KDTree<T>::Node> d_nodes = kdtree.nodes;
   typename KDTree<T>::Node* pd_nodes = thrust::raw_pointer_cast(d_nodes.data());
 
-  // Auto Buffer
-  ssrlcv::AutoBuffer<unsigned char> buf((1+1)*(sizeof(float) + sizeof(int)));
-  int* idx = (int*)buf.data(); // holds the node indices
-  float* dist = (float*)(idx + 1 + 1); // holds the euclidean distances
-
   // Priority Queue
-  int maxqsize = 1 << 10;
-  ssrlcv::AutoBuffer<unsigned char> _pqueue(maxqsize*sizeof(ssrlcv::PQueueElem)); 
-  ssrlcv::PQueueElem* pqueue = (ssrlcv::PQueueElem*)_pqueue.data();  
+  int maxqsize = 1 << 10;  
+  ssrlcv::ptr::device<ssrlcv::PQueueElem> d_pqueue(maxqsize);
 
   // array to hold the matched pairs
   unsigned int numPossibleMatches = queryFeatures->size();
@@ -421,22 +420,25 @@ int targetID, ssrlcv::KDTree<T> kdtree, ssrlcv::ptr::value<ssrlcv::Unity<float>>
 
   clock_t timer = clock();
 
-  if (seedDistances == nullptr) {
-    matchFeaturesKDTree<T><<<grid, block>>>(queryID, queryFeatures->size(), queryFeatures->device.get(), 
-    targetID, kdtree.points->size(), d_kdtree.get(), pd_nodes, d_points->device.get(), pqueue, idx, dist, matches->device.get(), this->absoluteThreshold);
-  }
-  else if (seedDistances->size() != queryFeatures->size()) {
-    logger.err<<"ERROR: seedDistances should have come from matching a seed image to queryFeatures"<<"\n";
-    exit(-1);
-  }
-  else{
+  matchFeaturesKDTree<T><<<grid, block>>>(queryID, queryFeatures->size(), queryFeatures->device.get(), 
+  targetID, kdtree.points->size(), d_kdtree.get(), pd_nodes, d_points->device.get(), d_pqueue.get(), matches->device.get(), this->absoluteThreshold);
+
+//   if (seedDistances == nullptr) {
+//     matchFeaturesKDTree<T><<<grid, block>>>(queryID, queryFeatures->size(), queryFeatures->device.get(), 
+//     targetID, kdtree.points->size(), d_kdtree.get(), pd_nodes, d_points->device.get(), pqueue, idx, dist, matches->device.get(), this->absoluteThreshold);
+//   }
+//   else if (seedDistances->size() != queryFeatures->size()) {
+//     logger.err<<"ERROR: seedDistances should have come from matching a seed image to queryFeatures"<<"\n";
+//     exit(-1);
+//   }
+//   else{
     // MemoryState seedOrigin = seedDistances->getMemoryState();
     // if(seedOrigin != gpu) seedDistances->setMemoryState(gpu);
     // matchFeaturesBruteForce<T><<<grid, block>>>(queryID, queryFeatures->size(), queryFeatures->device.get(),
     // targetID, targetFeatures->size(), targetFeatures->device.get(), matches->device.get(),seedDistances->device.get(),
     // this->relativeThreshold,this->absoluteThreshold);
     // if(seedOrigin != gpu) seedDistances->setMemoryState(seedOrigin);
-  }
+//  }
   cudaDeviceSynchronize();
   CudaCheckError();
 
@@ -450,23 +452,23 @@ int targetID, ssrlcv::KDTree<T> kdtree, ssrlcv::ptr::value<ssrlcv::Unity<float>>
 
 // move to MatchFactory
 template<typename T>
-__global__ void ssrlcv::matchFeaturesKDTree(unsigned int queryImageID, unsigned long numFeaturesQuery, ssrlcv::Feature<T>* featuresQuery, 
-unsigned int targetImageID, unsigned long numFeaturesTarget, ssrlcv::KDTree<T>* kdtree, typename ssrlcv::KDTree<T>::Node* nodes, ssrlcv::Feature<T>* featuresTree, ssrlcv::PQueueElem* pqueue, int* idx, float* dist, ssrlcv::DMatch* matches, float absoluteThreshold) {
+__global__ void ssrlcv::matchFeaturesKDTree(unsigned int queryImageID, unsigned long numFeaturesQuery, ssrlcv::Feature<T>* featuresQuery, unsigned int targetImageID, unsigned long numFeaturesTarget, 
+ssrlcv::KDTree<T>* kdtree, typename ssrlcv::KDTree<T>::Node* nodes, ssrlcv::Feature<T>* featuresTree, ssrlcv::PQueueElem* pqueue, ssrlcv::DMatch* matches, float absoluteThreshold) {
   
   unsigned int blockId = blockIdx.y * gridDim.x + blockIdx.x;
   
   if (blockId < numFeaturesQuery) {
     Feature<T> feature = featuresQuery[blockId];
     __syncthreads();
-
+    
     DMatch match;
     unsigned long numFeaturesTarget_register = numFeaturesTarget;
-    for(int f = threadIdx.x; f < numFeaturesTarget_register; f += 32) {
-      match = findNearest(kdtree, nodes, featuresTree, pqueue, idx, dist, feature, 1, numFeaturesQuery, absoluteThreshold); 
+    for (int f = threadIdx.x; f < numFeaturesTarget_register; f += 32) {
+      match = findNearest(kdtree, nodes, featuresTree, pqueue, feature, 1, numFeaturesQuery, absoluteThreshold); 
     } // for 
     __syncthreads();
     
-    if(threadIdx.x != 0) return;
+    if (threadIdx.x != 0) return;
     matches[blockId] = match;
   } // if
 } // matchFeaturesKDTree
@@ -550,22 +552,22 @@ int main() {
     allFeatures.push_back(img2);
 
     // print descriptors
-    printf("\nIMAGE 1 DESCRIPTORS\n");
-    for (size_t i = 0; i < img1->size(); i++) {
-        cout << "(x, y) = " << "(" << img1->host[i].loc.x << ", " << img1->host[i].loc.y << ")" << endl;
-        img1->host[i].descriptor.print();  
-    } 
-    printf("\nIMAGE 2 DESCRIPTORS\n");
-    for (size_t i = 0; i < img2->size(); i++) {
-        cout << "(x, y) = " << "(" << img1->host[i].loc.x << ", " << img1->host[i].loc.y << ")" << endl;
-        img2->host[i].descriptor.print(); 
-    }
+    // printf("\nIMAGE 1 DESCRIPTORS\n");
+    // for (size_t i = 0; i < img1->size(); i++) {
+    //     cout << "(x, y) = " << "(" << img1->host[i].loc.x << ", " << img1->host[i].loc.y << ")" << endl;
+    //     img1->host[i].descriptor.print();  
+    // } 
+    // printf("\nIMAGE 2 DESCRIPTORS\n");
+    // for (size_t i = 0; i < img2->size(); i++) {
+    //     cout << "(x, y) = " << "(" << img1->host[i].loc.x << ", " << img1->host[i].loc.y << ")" << endl;
+    //     img2->host[i].descriptor.print(); 
+    // }
 
     // build a kd tree using img2
     ssrlcv::KDTree<ssrlcv::SIFT_Descriptor> kdtree = ssrlcv::KDTree<ssrlcv::SIFT_Descriptor>(allFeatures[1]);
 
     //ssrlcv::ptr::value<ssrlcv::Unity<float>> seedDistances = nullptr;
-    ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::DMatch>> distanceMatches = matchFactory.generateDistanceMatches(0,allFeatures[0],1,kdtree,nullptr);
+    ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::DMatch>> distanceMatches = matchFactory.generateDistanceMatches(0,allFeatures[0],1,kdtree);
 
     printf("\nDONE\n");
     return 0;
