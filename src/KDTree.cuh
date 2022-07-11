@@ -60,7 +60,7 @@
 using namespace std;
 
 const int K = 128; // dimensions
-const int N = 20; // number of features
+const int N = 15000; // number of features
 const int MAX_TREE_DEPTH = 32; // upper bound for tree level, equivalent to 4 billion generated features 
 
 namespace ssrlcv {
@@ -239,28 +239,6 @@ namespace ssrlcv {
 
 // delete below code when transfering to SSRLCV
 
-void getGrid(unsigned long numElements, dim3 &grid, int device = 0){
-  cudaDeviceProp prop;
-  cudaGetDeviceProperties(&prop, device);
-  grid = {(unsigned int)prop.maxGridSize[0],(unsigned int)prop.maxGridSize[1],(unsigned int)prop.maxGridSize[2]};
-  if(numElements < grid.x){
-    grid.x = numElements;
-    grid.y = 1;
-    grid.z = 1;
-  }
-  else{
-    grid.x = 65536;
-    if(numElements < grid.x*grid.y){
-      grid.y = numElements/grid.x;
-      grid.y++;
-      grid.z = 1;
-    }
-    else if(numElements < grid.x*grid.y*grid.z){
-      grid.z = numElements/(grid.x*grid.y);
-      grid.z++;
-    }
-  }
-} // getGrid
 
 /**
 * \brief Method for getting grid and block for a 1D kernel.

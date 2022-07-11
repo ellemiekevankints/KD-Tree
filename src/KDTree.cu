@@ -201,7 +201,7 @@ ssrlcv::Feature<T> feature, int emax, float absoluteThreshold, int k) {
     int i, j, ncount = 0, e = 0;
     int qsize = 0, maxqsize = 1 << 10;
 
-    int idx[2]; // holds the node indice
+    int idx[2]; // holds the node indices
     float dist[2]; // holds the euclidean distances
 
     for (e = 0; e < emax;) {
@@ -260,10 +260,6 @@ ssrlcv::Feature<T> feature, int emax, float absoluteThreshold, int k) {
                 }
                 dist[ncount] = d;
                 // printf("\nthreadIdx[%d] dist[%d] = %f\n", threadIdx.x, ncount, dist[ncount]);
-                
-                // here, the first dist values are set correct, but then they seem to be overridden to 0 ???
-                //printf("\nthreadIdx[%d] dist[0] = %f\n", threadIdx.x, dist[0]);
-
                 idx[ncount] = i;
                 // printf("\nthreadIdx[%d] idx[%d] = %f\n", threadIdx.x, ncount, idx[ncount]);
 
@@ -281,11 +277,9 @@ ssrlcv::Feature<T> feature, int emax, float absoluteThreshold, int k) {
                 } // for
                 ncount += ncount < k;
                 e++;
-                break;   
-            } // if
+                break; 
 
-            // all the dist values change to 0 here ??? except for one set in the middle
-            // printf("\nthreadIdx[%d] dist[0] = %f\n", threadIdx.x, dist[0]);
+            } // if
 
             int alt;
             if (vec[n.idx] <= n.boundary) {
@@ -322,7 +316,6 @@ ssrlcv::Feature<T> feature, int emax, float absoluteThreshold, int k) {
 
     DMatch match;
     match.distance = dist[0]; // smallest distance
-    // all dist values are 0 here
     // printf("\nthreadIdx[%d] dist = %f\n", threadIdx.x, match.distance);
     int matchIndex = idx[0]; // index of corresponding leaf node/point
 
@@ -423,7 +416,14 @@ ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::DMatch>> ssrlcv::MatchFactory<T>::gener
   getFlatGridBlock(queryFeatures->size(), grid, block, ptr);
 
   clock_t timer = clock();
-
+  
+  printf("\n%d\n", queryFeatures->size());
+  printf("\n%d\n", grid.x);
+  printf("\n%d\n", grid.y);
+  printf("\n%d\n", grid.z);
+  printf("\n%d\n", block.x);
+  printf("\n%d\n", block.y); 
+  printf("\n%d\n", block.z); 
   matchFeaturesKDTree<T><<<grid, block>>>(queryID, queryFeatures->size(), queryFeatures->device.get(), 
   targetID, d_kdtree.get(), pd_nodes, d_points->device.get(), d_pqueue.get(), matches->device.get(), this->absoluteThreshold);
 
@@ -467,10 +467,11 @@ ssrlcv::KDTree<T>* kdtree, typename ssrlcv::KDTree<T>::Node* nodes, ssrlcv::Feat
     
     DMatch match;
     int emax = numFeaturesQuery/2; // at most, search half the tree
-    match = findNearest(kdtree, nodes, featuresTree, pqueue, feature, emax, numFeaturesQuery, absoluteThreshold); 
+    match = findNearest(kdtree, nodes, featuresTree, pqueue, feature, emax, absoluteThreshold); 
     __syncthreads();
     
-    if (threadIdx.x != 0) return; // am i returning correctly ???
+    // output is the same even if this line is commented out
+    if (threadIdx.x != 0) return;
     matches[globalThreadID] = match;
   } 
 
