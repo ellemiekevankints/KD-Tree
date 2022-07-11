@@ -199,10 +199,13 @@ namespace ssrlcv {
     /*
      * \brief finds the k nearest neighbors to a point while looking at emax (at most) leaves
      * \param kdtree the KD-Tree to search through
+     * \param nodes the nodes of the KD-Tree
+     * \param treeFeatures the KD-Tree feature points 
+     * \param pqueue the priority queue used to search the tree 
      * \param queryFeature the query feature point
      * \param emax the max number of leaf nodes to search. a value closer to the total number feature points correleates to a higher accuracy macth
      * \param absoluteThreshold the maximum distance between two matched points
-     * \param k the number of nearest neighbors 
+     * \param k the number of nearest neighbors. by default this value finds the 2 closest features to a given feature point
     */ 
     template<typename T> 
     __device__ DMatch findNearest(ssrlcv::KDTree<T>* kdtree, typename KDTree<T>::Node* nodes, ssrlcv::Feature<T>* treeFeatures, ssrlcv::PQueueElem* pqueue, 
@@ -223,7 +226,7 @@ namespace ssrlcv {
 
     template<typename T>
     __global__ void matchFeaturesKDTree(unsigned int queryImageID, unsigned long numFeaturesQuery, Feature<T>* featuresQuery, 
-    unsigned int targetImageID, unsigned long numFeaturesTarget, KDTree<T>* kdtree, typename KDTree<T>::Node* nodes, ssrlcv::Feature<T>* treeFeatures, ssrlcv::PQueueElem* pqueue, DMatch* matches, float absoluteThreshold);
+    unsigned int targetImageID, KDTree<T>* kdtree, typename KDTree<T>::Node* nodes, ssrlcv::Feature<T>* featuresTree, ssrlcv::PQueueElem* pqueue, DMatch* matches, float absoluteThreshold);
 
     // __global__ void matchFeaturesKDTree(unsigned int queryImageID, unsigned long numFeaturesQuery,
     //     Feature<T>* featuresQuery, unsigned int targetImageID, unsigned long numFeaturesTarget,
@@ -258,5 +261,63 @@ void getGrid(unsigned long numElements, dim3 &grid, int device = 0){
     }
   }
 } // getGrid
+
+/**
+* \brief Method for getting grid and block for a 1D kernel.
+* \details This method calculates a grid and block configuration
+* in an attempt to achieve high levels of CUDA occupancy as well
+* as ensuring there will be enough threads for a specified number of elements.
+* Methods for determining globalThreadID's from the returned grid and block
+* can be found at the bottom of cuda_util.h but must be placed in the same
+* compilational unit.
+* \param numElements - number of elements that will be threaded in kernel
+* \param grid - dim3 grid argument to be set withint this function
+* \param block - dim3 block argument to be set within this function
+* \param kernel - function pointer to the kernel that is going to use the grid and block
+* \param dynamicSharedMem - size of dynamic shared memory used in kernel (optional parameter - will default to 0)
+* \param device - the NVIDIA GPU device ID (optional parameter - will default to 0)
+* \warning This creates grid and block dimensions that guarantee coverage of numElements.
+* This likely means that there will be more threads that necessary, so make sure to check that
+* globalThreadID < numElements in you kernel. Otherwise there will be an illegal memory access.
+*/
+template<typename... Types>
+void getFlatGridBlock(unsigned long numElements, dim3 &grid, dim3 &block, void (*kernel)(Types...), size_t dynamicSharedMem = 0, int device = 0){
+  grid = {1,1,1};
+  block = {1,1,1};
+  cudaDeviceProp prop;
+  cudaGetDeviceProperties(&prop, device);
+
+  int blockSize;
+  int minGridSize;
+  cudaOccupancyMaxPotentialBlockSize(
+    &minGridSize,
+    &blockSize,
+    kernel,
+    dynamicSharedMem,
+    numElements
+  );
+  block = {(unsigned int)blockSize,1,1};
+  unsigned int gridSize = (numElements + (unsigned int)blockSize - 1) / (unsigned int)blockSize;
+  if(gridSize > prop.maxGridSize[0]){
+    if(gridSize >= 65535L*65535L*65535L){
+      grid = {65535,65535,65535};
+    }
+    else{
+      gridSize = (gridSize/65535L) + 1;
+      grid.x = 65535;
+      if(gridSize > 65535){
+        grid.z = (grid.y/65535) + 1;
+        grid.y = 65535;
+      }
+      else{
+        grid.y = 65535;
+        grid.z = 1;
+      }
+    }
+  }
+  else{
+    grid = {gridSize,1,1};
+  }
+}
 
 #endif

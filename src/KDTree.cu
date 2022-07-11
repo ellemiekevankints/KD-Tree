@@ -208,13 +208,9 @@ ssrlcv::Feature<T> feature, int emax, float absoluteThreshold, int k) {
         float d, alt_d = 0.f; 
         int nidx; // node index
         
-        if (e == 0) { 
-            nidx = 0; 
-            //printf("\n\nSUCCESS\n\n"); //this statement is reached
-        } 
+        if (e == 0) { nidx = 0; } 
         else {
             // take the next node from the priority queue
-            printf("\n\nSUCCESS\n\n"); //this one is not
             if (qsize == 0) { break; }
             nidx = pqueue[0].idx; // current tree position
             alt_d = pqueue[0].dist; // distance of the query point from the node
@@ -244,8 +240,7 @@ ssrlcv::Feature<T> feature, int emax, float absoluteThreshold, int k) {
                     i = left;
                 } // for
             } // if
-            if (ncount == k && alt_d > dist[ncount-1])
-                continue;
+            if (ncount == k && alt_d > dist[ncount-1]) { continue; }
         } // if-else
 
         for (;;) {
@@ -256,19 +251,21 @@ ssrlcv::Feature<T> feature, int emax, float absoluteThreshold, int k) {
 
             if (n.idx < 0) { // if it is a leaf node
                 i = ~n.idx; 
-                const unsigned char *row = featuresTree[i].descriptor.values; // descriptor values[128] from target
+                const unsigned char* row = featuresTree[i].descriptor.values; // descriptor values[128] from target
 
                 // euclidean distance
                 for (j = 0, d = 0.f; j < K; j++) {
                     float t = vec[j] - row[j];
-                    // printf("\nvec[%d] = %f\n", j, vec[j]);
-                    // printf("\nrow[%d] = %f\n", j, row[j]);
-                    // printf("\nt = %f\n", t);
                     d += t*t;
                 }
                 dist[ncount] = d;
-                printf("\ndist[%d] = %f\n", ncount, dist[ncount]);
+                // printf("\nthreadIdx[%d] dist[%d] = %f\n", threadIdx.x, ncount, dist[ncount]);
+                
+                // here, the first dist values are set correct, but then they seem to be overridden to 0 ???
+                //printf("\nthreadIdx[%d] dist[0] = %f\n", threadIdx.x, dist[0]);
+
                 idx[ncount] = i;
+                // printf("\nthreadIdx[%d] idx[%d] = %f\n", threadIdx.x, ncount, idx[ncount]);
 
                 for (i = ncount-1; i >= 0; i--) {
                     if (dist[i] <= d)
@@ -286,6 +283,9 @@ ssrlcv::Feature<T> feature, int emax, float absoluteThreshold, int k) {
                 e++;
                 break;   
             } // if
+
+            // all the dist values change to 0 here ??? except for one set in the middle
+            // printf("\nthreadIdx[%d] dist[0] = %f\n", threadIdx.x, dist[0]);
 
             int alt;
             if (vec[n.idx] <= n.boundary) {
@@ -315,14 +315,16 @@ ssrlcv::Feature<T> feature, int emax, float absoluteThreshold, int k) {
                 pqueue[parent] = temp; 
 
                 i = parent;
-            }
+            } // for
             qsize += qsize+1 < maxqsize;
         } // for
     } // for
 
     DMatch match;
     match.distance = dist[0]; // smallest distance
-    int matchIndex = idx[0]; // index of corresponding node/point
+    // all dist values are 0 here
+    // printf("\nthreadIdx[%d] dist = %f\n", threadIdx.x, match.distance);
+    int matchIndex = idx[0]; // index of corresponding leaf node/point
 
     if (match.distance >= absoluteThreshold) { match.invalid = true; } 
     else {
@@ -335,7 +337,6 @@ ssrlcv::Feature<T> feature, int emax, float absoluteThreshold, int k) {
       // match.keyPoints[1].parentId = targetImageID;
     }
 
-    // will need to change this to return dist[0]; ?????
     return match;
 } // findNearest
 
@@ -373,7 +374,7 @@ void ssrlcv::MatchFactory<T>::validateMatches(ssrlcv::ptr::value<ssrlcv::Unity<s
     std::cout<<"No valid matches found"<<"\n";
     matches.clear();
     return;
-  }
+  } // if
   
   printf("%d valid matches found out of %lu original matches\n",numMatchesLeft,matches->size());
 
@@ -396,32 +397,35 @@ ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::DMatch>> ssrlcv::MatchFactory<T>::gener
   // transfer KD-Tree to GPU
   ssrlcv::ptr::device<ssrlcv::KDTree<T>> d_kdtree(1);
   CudaSafeCall(cudaMemcpy(d_kdtree.get(),&kdtree,sizeof(kdtree),cudaMemcpyHostToDevice));
-    
+   
+  // transfer KD-Tree nodes to GPU
+  thrust::device_vector<typename KDTree<T>::Node> d_nodes = kdtree.nodes;
+  typename KDTree<T>::Node* pd_nodes = thrust::raw_pointer_cast(d_nodes.data());
+
   // transfer KD-Tree points to GPU
   ssrlcv::ptr::value<ssrlcv::Unity<Feature<T>>> d_points = kdtree.points; 
   MemoryState t_origin = d_points->getMemoryState();
   if(t_origin != gpu) d_points->setMemoryState(gpu); 
 
-  // transfer KD-Tree nodes to GPU
-  thrust::device_vector<typename KDTree<T>::Node> d_nodes = kdtree.nodes;
-  typename KDTree<T>::Node* pd_nodes = thrust::raw_pointer_cast(d_nodes.data());
-
-  // Priority Queue
+  // priority queue
   int maxqsize = 1 << 10;  
   ssrlcv::ptr::device<ssrlcv::PQueueElem> d_pqueue(maxqsize);
 
   // array to hold the matched pairs
   unsigned int numPossibleMatches = queryFeatures->size();
-  ssrlcv::ptr::value<ssrlcv::Unity<DMatch>> matches = ssrlcv::ptr::value<ssrlcv::Unity<DMatch>>(nullptr, numPossibleMatches, ssrlcv::gpu);
+  ssrlcv::ptr::value<ssrlcv::Unity<DMatch>> matches = ssrlcv::ptr::value<ssrlcv::Unity<DMatch>>(nullptr, numPossibleMatches, gpu);
 
   dim3 grid = {1,1,1};
-  dim3 block = {32,1,1}; // IMPROVE
-  getGrid(matches->size(),grid);
+  dim3 block = {32,1,1};
+  // getGrid(matches->size(),grid);
+  void (*ptr)(unsigned int, unsigned long, Feature<T>*, unsigned int, KDTree<T>*,
+  typename KDTree<T>::Node*, Feature<T>*, PQueueElem*, DMatch*, float) = &matchFeaturesKDTree;
+  getFlatGridBlock(queryFeatures->size(), grid, block, ptr);
 
   clock_t timer = clock();
 
   matchFeaturesKDTree<T><<<grid, block>>>(queryID, queryFeatures->size(), queryFeatures->device.get(), 
-  targetID, kdtree.points->size(), d_kdtree.get(), pd_nodes, d_points->device.get(), d_pqueue.get(), matches->device.get(), this->absoluteThreshold);
+  targetID, d_kdtree.get(), pd_nodes, d_points->device.get(), d_pqueue.get(), matches->device.get(), this->absoluteThreshold);
 
 //   if (seedDistances == nullptr) {
 //     matchFeaturesKDTree<T><<<grid, block>>>(queryID, queryFeatures->size(), queryFeatures->device.get(), 
@@ -452,25 +456,24 @@ ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::DMatch>> ssrlcv::MatchFactory<T>::gener
 
 // move to MatchFactory
 template<typename T>
-__global__ void ssrlcv::matchFeaturesKDTree(unsigned int queryImageID, unsigned long numFeaturesQuery, ssrlcv::Feature<T>* featuresQuery, unsigned int targetImageID, unsigned long numFeaturesTarget, 
+__global__ void ssrlcv::matchFeaturesKDTree(unsigned int queryImageID, unsigned long numFeaturesQuery, ssrlcv::Feature<T>* featuresQuery, unsigned int targetImageID, 
 ssrlcv::KDTree<T>* kdtree, typename ssrlcv::KDTree<T>::Node* nodes, ssrlcv::Feature<T>* featuresTree, ssrlcv::PQueueElem* pqueue, ssrlcv::DMatch* matches, float absoluteThreshold) {
   
-  unsigned int blockId = blockIdx.y * gridDim.x + blockIdx.x;
+  unsigned int globalThreadID = (blockIdx.y * gridDim.x + blockIdx.x) * blockDim.x + threadIdx.x; // 2D grid of 1D blocks
   
-  if (blockId < numFeaturesQuery) {
-    Feature<T> feature = featuresQuery[blockId];
+  if (globalThreadID < numFeaturesQuery) { 
+    Feature<T> feature = featuresQuery[globalThreadID]; 
     __syncthreads();
     
     DMatch match;
-    unsigned long numFeaturesTarget_register = numFeaturesTarget;
-    for (int f = threadIdx.x; f < numFeaturesTarget_register; f += 32) {
-      match = findNearest(kdtree, nodes, featuresTree, pqueue, feature, 1, numFeaturesQuery, absoluteThreshold); 
-    } // for 
+    int emax = numFeaturesQuery/2; // at most, search half the tree
+    match = findNearest(kdtree, nodes, featuresTree, pqueue, feature, emax, numFeaturesQuery, absoluteThreshold); 
     __syncthreads();
     
-    if (threadIdx.x != 0) return;
-    matches[blockId] = match;
-  } // if
+    if (threadIdx.x != 0) return; // am i returning correctly ???
+    matches[globalThreadID] = match;
+  } 
+
 } // matchFeaturesKDTree
 
 /* ************************************************************************************************************************************************************************************************************************************************************************** */
@@ -567,18 +570,15 @@ int main() {
     ssrlcv::KDTree<ssrlcv::SIFT_Descriptor> kdtree = ssrlcv::KDTree<ssrlcv::SIFT_Descriptor>(allFeatures[1]);
 
     //ssrlcv::ptr::value<ssrlcv::Unity<float>> seedDistances = nullptr;
-    ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::DMatch>> distanceMatches = matchFactory.generateDistanceMatches(0,allFeatures[0],1,kdtree);
+    ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::DMatch>> dmatches = matchFactory.generateDistanceMatches(0,allFeatures[0],1,kdtree);
+    dmatches->transferMemoryTo(ssrlcv::cpu);
+    printf("\nDONE MATCHING\n");
 
-    printf("\nDONE\n");
-    return 0;
-
-    // do this on N separate CUDA threads
-    // for (int i = 0; i < N; i++) { 
-    //     dmatches->host[i] = kdtree.findNearest(kdtree, img2->host[i], nn, emax);
+    // for (int i = 0; i < dmatches->size(); i++) { 
     //     printf("\nBEST MATCH\n");
     //     printf("\tdist = %f\n", dmatches->host[i].distance);
-    //     printf("\tlocation of point on img1 = {%f, %f}\n", dmatches->host[i].keyPoints[0].loc.x, dmatches->host[i].keyPoints[0].loc.y);
-    //     printf("\tlocation of point on img2 = {%f, %f}\n", dmatches->host[i].keyPoints[1].loc.x, dmatches->host[i].keyPoints[1].loc.y);
+    //     printf("\tlocation of point on img1 = {%d, %d}\n", dmatches->host[i].keyPoints[0].loc.x, dmatches->host[i].keyPoints[0].loc.y);
+    //     printf("\tlocation of point on img2 = {%d, %d}\n", dmatches->host[i].keyPoints[1].loc.x, dmatches->host[i].keyPoints[1].loc.y);
     // }
 
     // const unsigned char *vec;
@@ -599,9 +599,7 @@ int main() {
  
     // } 
 
-    // validate matches
-
     //delete img1, img2;
     //delete dmatches;
-    //return 0;
+    return 0;
 } // main
