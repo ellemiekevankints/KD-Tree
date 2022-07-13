@@ -60,7 +60,7 @@
 using namespace std;
 
 const int K = 128; // dimensions
-const int N = 15000; // number of features
+const int N = 35000; // number of features
 const int MAX_TREE_DEPTH = 32; // upper bound for tree level, equivalent to 4 billion generated features 
 
 namespace ssrlcv {

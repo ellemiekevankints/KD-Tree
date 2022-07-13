@@ -417,13 +417,6 @@ ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::DMatch>> ssrlcv::MatchFactory<T>::gener
 
   clock_t timer = clock();
   
-  printf("\n%d\n", queryFeatures->size());
-  printf("\n%d\n", grid.x);
-  printf("\n%d\n", grid.y);
-  printf("\n%d\n", grid.z);
-  printf("\n%d\n", block.x);
-  printf("\n%d\n", block.y); 
-  printf("\n%d\n", block.z); 
   matchFeaturesKDTree<T><<<grid, block>>>(queryID, queryFeatures->size(), queryFeatures->device.get(), 
   targetID, d_kdtree.get(), pd_nodes, d_points->device.get(), d_pqueue.get(), matches->device.get(), this->absoluteThreshold);
 
