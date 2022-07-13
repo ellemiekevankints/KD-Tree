@@ -251,7 +251,7 @@ ssrlcv::Feature<T> feature, int emax, float absoluteThreshold, int k) {
 
             if (n.idx < 0) { // if it is a leaf node
                 i = ~n.idx; 
-                const unsigned char* row = featuresTree[i].descriptor.values; // descriptor values[128] from target
+                const unsigned char* row = featuresTree[i].descriptor.values; // descriptor values[128] from tree
 
                 // euclidean distance
                 for (j = 0, d = 0.f; j < K; j++) {
@@ -259,9 +259,9 @@ ssrlcv::Feature<T> feature, int emax, float absoluteThreshold, int k) {
                     d += t*t;
                 }
                 dist[ncount] = d;
-                // printf("\nthreadIdx[%d] dist[%d] = %f\n", threadIdx.x, ncount, dist[ncount]);
+                //printf("\nthreadIdx[%d] dist[%d] = %f\n", threadIdx.x, ncount, dist[ncount]);
                 idx[ncount] = i;
-                // printf("\nthreadIdx[%d] idx[%d] = %f\n", threadIdx.x, ncount, idx[ncount]);
+                //printf("\nthreadIdx[%d] idx[%d] = %f\n", threadIdx.x, ncount, idx[ncount]);
 
                 for (i = ncount-1; i >= 0; i--) {
                     if (dist[i] <= d)
@@ -316,19 +316,22 @@ ssrlcv::Feature<T> feature, int emax, float absoluteThreshold, int k) {
 
     DMatch match;
     match.distance = dist[0]; // smallest distance
-    // printf("\nthreadIdx[%d] dist = %f\n", threadIdx.x, match.distance);
     int matchIndex = idx[0]; // index of corresponding leaf node/point
 
-    if (match.distance >= absoluteThreshold) { match.invalid = true; } 
-    else {
-      match.invalid = false;
-      match.keyPoints[0].loc = featuresTree[matchIndex].loc; // img1 
-      match.keyPoints[1].loc = feature.loc; // img2
+    match.invalid = false;
+    match.keyPoints[0].loc = feature.loc; // img1
+    match.keyPoints[1].loc = featuresTree[matchIndex].loc; // img2
+
+    // if (match.distance >= absoluteThreshold) { match.invalid = true; } 
+    // else {
+    //   match.invalid = false;
+    //   match.keyPoints[0].loc = feature.loc; // img1
+    //   match.keyPoints[1].loc = featuresTree[matchIndex].loc; // img2
       
-      // we do not have Image class implemented so no image id
-      // match.keyPoints[0].parentId = queryImageID;  
-      // match.keyPoints[1].parentId = targetImageID;
-    }
+    //   // we do not have Image class implemented so no image id
+    //   // match.keyPoints[0].parentId = queryImageID;  
+    //   // match.keyPoints[1].parentId = targetImageID;
+    // }
 
     return match;
 } // findNearest
@@ -408,9 +411,9 @@ ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::DMatch>> ssrlcv::MatchFactory<T>::gener
   unsigned int numPossibleMatches = queryFeatures->size();
   ssrlcv::ptr::value<ssrlcv::Unity<DMatch>> matches = ssrlcv::ptr::value<ssrlcv::Unity<DMatch>>(nullptr, numPossibleMatches, gpu);
 
+  // grid and block initilization
   dim3 grid = {1,1,1};
-  dim3 block = {32,1,1};
-  // getGrid(matches->size(),grid);
+  dim3 block = {1,1,1};
   void (*ptr)(unsigned int, unsigned long, Feature<T>*, unsigned int, KDTree<T>*,
   typename KDTree<T>::Node*, Feature<T>*, PQueueElem*, DMatch*, float) = &matchFeaturesKDTree;
   getFlatGridBlock(queryFeatures->size(), grid, block, ptr);
@@ -420,22 +423,6 @@ ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::DMatch>> ssrlcv::MatchFactory<T>::gener
   matchFeaturesKDTree<T><<<grid, block>>>(queryID, queryFeatures->size(), queryFeatures->device.get(), 
   targetID, d_kdtree.get(), pd_nodes, d_points->device.get(), d_pqueue.get(), matches->device.get(), this->absoluteThreshold);
 
-//   if (seedDistances == nullptr) {
-//     matchFeaturesKDTree<T><<<grid, block>>>(queryID, queryFeatures->size(), queryFeatures->device.get(), 
-//     targetID, kdtree.points->size(), d_kdtree.get(), pd_nodes, d_points->device.get(), pqueue, idx, dist, matches->device.get(), this->absoluteThreshold);
-//   }
-//   else if (seedDistances->size() != queryFeatures->size()) {
-//     logger.err<<"ERROR: seedDistances should have come from matching a seed image to queryFeatures"<<"\n";
-//     exit(-1);
-//   }
-//   else{
-    // MemoryState seedOrigin = seedDistances->getMemoryState();
-    // if(seedOrigin != gpu) seedDistances->setMemoryState(gpu);
-    // matchFeaturesBruteForce<T><<<grid, block>>>(queryID, queryFeatures->size(), queryFeatures->device.get(),
-    // targetID, targetFeatures->size(), targetFeatures->device.get(), matches->device.get(),seedDistances->device.get(),
-    // this->relativeThreshold,this->absoluteThreshold);
-    // if(seedOrigin != gpu) seedDistances->setMemoryState(seedOrigin);
-//  }
   cudaDeviceSynchronize();
   CudaCheckError();
 
@@ -462,9 +449,7 @@ ssrlcv::KDTree<T>* kdtree, typename ssrlcv::KDTree<T>::Node* nodes, ssrlcv::Feat
     int emax = numFeaturesQuery/2; // at most, search half the tree
     match = findNearest(kdtree, nodes, featuresTree, pqueue, feature, emax, absoluteThreshold); 
     __syncthreads();
-    
-    // output is the same even if this line is commented out
-    if (threadIdx.x != 0) return;
+
     matches[globalThreadID] = match;
   } 
 
@@ -524,7 +509,7 @@ ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::Feature<ssrlcv::SIFT_Descriptor>>> gene
         featureptr[i].loc = {(float)i, -1.0f}; 
         // fill descriptor with 128 random nums
         for (int j = 0; j < K; j++) {
-            unsigned char r = (unsigned char) rand();
+            unsigned char r = (unsigned char) rand()/10;
             featureptr[i].descriptor.values[j] = r;
         }
         featureptr[i].descriptor.theta = 0.0f;
@@ -563,35 +548,34 @@ int main() {
     // build a kd tree using img2
     ssrlcv::KDTree<ssrlcv::SIFT_Descriptor> kdtree = ssrlcv::KDTree<ssrlcv::SIFT_Descriptor>(allFeatures[1]);
 
-    //ssrlcv::ptr::value<ssrlcv::Unity<float>> seedDistances = nullptr;
+    // generate matches
     ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::DMatch>> dmatches = matchFactory.generateDistanceMatches(0,allFeatures[0],1,kdtree);
     dmatches->transferMemoryTo(ssrlcv::cpu);
     printf("\nDONE MATCHING\n");
 
-    // for (int i = 0; i < dmatches->size(); i++) { 
-    //     printf("\nBEST MATCH\n");
-    //     printf("\tdist = %f\n", dmatches->host[i].distance);
-    //     printf("\tlocation of point on img1 = {%d, %d}\n", dmatches->host[i].keyPoints[0].loc.x, dmatches->host[i].keyPoints[0].loc.y);
-    //     printf("\tlocation of point on img2 = {%d, %d}\n", dmatches->host[i].keyPoints[1].loc.x, dmatches->host[i].keyPoints[1].loc.y);
-    // }
+    for (int i = 0; i < dmatches->size(); i++) { 
+        printf("\nBEST MATCH\n");
+        printf("\tdist = %f\n", dmatches->host[i].distance);
+        printf("\tlocation of point on img1 = {%f, %f}\n", dmatches->host[i].keyPoints[0].loc.x, dmatches->host[i].keyPoints[0].loc.y);
+        printf("\tlocation of point on img2 = {%f, %f}\n", dmatches->host[i].keyPoints[1].loc.x, dmatches->host[i].keyPoints[1].loc.y);
+    }
 
-    // const unsigned char *vec;
-    // const unsigned char *row;
-    // for (int i = 0; i < N; i++) { 
-    //     vec = img2->host[i].descriptor.values;
+    const unsigned char *vec;
+    const unsigned char *row;
+    for (int i = 0; i < N; i++) { 
+        vec = img1->host[i].descriptor.values;
 
-    //     for (int j = 0; j < N; j ++) {
-    //         row = img1->host[j].descriptor.values;
-    //         float d = 0.f; // reset d
-    //         int k = 0;
-    //         for (k = 0, d = 0.f; k < K; k++) {
-    //             float t = vec[k] - row[k];
-    //             d += t*t;
-    //         }
-    //         cout << "DISTANCE BETWEEN img1[" << j << "] and img2[" << i << "] = " << d << endl; 
-    //     } 
- 
-    // } 
+        for (int j = 0; j < N; j ++) {
+            row = img2->host[j].descriptor.values;
+            float d = 0.f; // reset d
+            int k = 0;
+            for (k = 0, d = 0.f; k < K; k++) {
+                float t = vec[k] - row[k];
+                d += t*t;
+            }
+            cout << "DISTANCE BETWEEN img1[" << i << "] and img2[" << j << "] = " << d << endl; 
+        } 
+    } 
 
     //delete img1, img2;
     //delete dmatches;

@@ -24,3 +24,7 @@ nvcc src/KDTree.cu -include src/KDTree.cuh -o bin/KDTree.cu.o -dc
 nvcc bin/Feature.o bin/KDTree.cu.o bin/Logger.o -o KDTree
 
 ./KDTree
+
+rm bin/Logger.o
+rm bin/Feature.o
+rm bin/KDTree.cu.o

@@ -60,7 +60,7 @@
 using namespace std;
 
 const int K = 128; // dimensions
-const int N = 35000; // number of features
+const int N = 20; // number of features
 const int MAX_TREE_DEPTH = 32; // upper bound for tree level, equivalent to 4 billion generated features 
 
 namespace ssrlcv {
@@ -227,10 +227,6 @@ namespace ssrlcv {
     template<typename T>
     __global__ void matchFeaturesKDTree(unsigned int queryImageID, unsigned long numFeaturesQuery, Feature<T>* featuresQuery, 
     unsigned int targetImageID, KDTree<T>* kdtree, typename KDTree<T>::Node* nodes, ssrlcv::Feature<T>* featuresTree, ssrlcv::PQueueElem* pqueue, DMatch* matches, float absoluteThreshold);
-
-    // __global__ void matchFeaturesKDTree(unsigned int queryImageID, unsigned long numFeaturesQuery,
-    //     Feature<T>* featuresQuery, unsigned int targetImageID, unsigned long numFeaturesTarget,
-    //     KDTree<T>* kdtree, DMatch* matches, float* seedDistances, float relativeThreshold, float absoluteThreshold);
 
 /* ************************************************************************************************************************************************************************************************************************************************************************** */
 
