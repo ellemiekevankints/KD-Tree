@@ -184,7 +184,7 @@ namespace ssrlcv {
     * PRIORITY QUEUE STRUCT *
     *************************/
 
-    // priority queue used to search the tree
+    // a priority queue element used in searching the tree
     struct PQueueElem {
         CUDA_CALLABLE_MEMBER PQueueElem() : dist(0), idx(0) {}
         CUDA_CALLABLE_MEMBER PQueueElem(float _dist, int _idx) : dist(_dist), idx(_idx) {}
@@ -192,6 +192,98 @@ namespace ssrlcv {
         int idx; // current tree position
     };
   
+    /********************
+    * AUTO BUFFER CLASS *
+    *********************/
+    template<typename _Tp, size_t fixed_size = 1024/sizeof(_Tp)+8> 
+    class AutoBuffer {
+
+    public:
+        typedef _Tp value_type;
+
+        // the default constructor
+        CUDA_CALLABLE_MEMBER AutoBuffer();
+        // constructor taking the real buffer size
+        explicit CUDA_CALLABLE_MEMBER AutoBuffer(size_t _size);
+
+        // the assignment operator
+        CUDA_CALLABLE_MEMBER AutoBuffer<_Tp, fixed_size>& operator = (const AutoBuffer<_Tp, fixed_size>& buf);
+
+        // destructor, calls deallocate()
+        CUDA_CALLABLE_MEMBER ~AutoBuffer();
+
+        // allocates the new buffer of size _size. if the _size is small enough, stack-allocated buffer is used
+        CUDA_CALLABLE_MEMBER void allocate(size_t _size);
+        // deallocates the buffer if it was dynamically allocated
+        CUDA_CALLABLE_MEMBER void deallocate();
+        // returns pointer to the real buffer, stack-allocated or heap-allocated
+        CUDA_CALLABLE_MEMBER inline _Tp* data() { return ptr; }
+        // returns read-only pointer to the real buffer, stack-allocated or heap-allocated
+        CUDA_CALLABLE_MEMBER inline const _Tp* data() const { return ptr; }
+
+    // protected:
+
+        // pointer to the real buffer, can point to buf if the buffer is small enough
+        _Tp* ptr;
+        // size of the real buffer
+        size_t sz;
+        // pre-allocated buffer. at least 1 element to confirm C++ standard requirements
+        _Tp buf[(fixed_size > 0) ? fixed_size : 1];
+    };
+
+    /*****************************
+    * AUTO BUFFER IMPLEMENTATION *
+    ******************************/
+    template<typename _Tp, size_t fixed_size> CUDA_CALLABLE_MEMBER inline
+    AutoBuffer<_Tp, fixed_size>::AutoBuffer() {
+        ptr = buf;
+        sz = fixed_size;
+    }
+
+    template<typename _Tp, size_t fixed_size> CUDA_CALLABLE_MEMBER inline
+    AutoBuffer<_Tp, fixed_size>::AutoBuffer(size_t _size) {
+        ptr = buf;
+        sz = fixed_size;
+        allocate(_size);
+    }
+
+    template<typename _Tp, size_t fixed_size> CUDA_CALLABLE_MEMBER inline AutoBuffer<_Tp, fixed_size>&
+    AutoBuffer<_Tp, fixed_size>::operator = (const AutoBuffer<_Tp, fixed_size>& abuf) {
+        if( this != &abuf ) {
+            deallocate();
+            allocate(abuf.size());
+            for( size_t i = 0; i < sz; i++ )
+                ptr[i] = abuf.ptr[i];
+        }
+        return *this;
+    }
+
+    template<typename _Tp, size_t fixed_size> CUDA_CALLABLE_MEMBER inline 
+    AutoBuffer<_Tp, fixed_size>::~AutoBuffer() { deallocate(); }
+
+    template<typename _Tp, size_t fixed_size> CUDA_CALLABLE_MEMBER inline void
+    AutoBuffer<_Tp, fixed_size>::allocate(size_t _size) {
+        if(_size <= sz) {
+            sz = _size;
+            return;
+        }
+        deallocate();
+        sz = _size;
+        if(_size > fixed_size) {
+            ptr = new _Tp[_size];
+        }
+    }
+
+    template<typename _Tp, size_t fixed_size> CUDA_CALLABLE_MEMBER inline void
+    AutoBuffer<_Tp, fixed_size>::deallocate() {
+        if( ptr != buf ) {
+            delete[] ptr;
+            ptr = buf;
+            sz = fixed_size;
+        }
+    }
+
+
     // put the code below in MatchFactroy.cu
 
 /* ************************************************************************************************************************************************************************************************************************************************************************** */
@@ -208,7 +300,7 @@ namespace ssrlcv {
      * \param k the number of nearest neighbors. by default this value finds the 2 closest features to a given feature point
     */ 
     template<typename T> 
-    __device__ DMatch findNearest(ssrlcv::KDTree<T>* kdtree, typename KDTree<T>::Node* nodes, ssrlcv::Feature<T>* treeFeatures, ssrlcv::PQueueElem* pqueue, 
+    __device__ DMatch findNearest(ssrlcv::KDTree<T>* kdtree, typename KDTree<T>::Node* nodes, ssrlcv::Feature<T>* treeFeatures, ssrlcv::PQueueElem* pqueue, int* idx, float* dist,
     ssrlcv::Feature<T> queryFeature, int emax, float absoluteThreshold, int k = 1);
 
     template<typename T>    
@@ -220,13 +312,13 @@ namespace ssrlcv {
             float relativeThreshold;
             MatchFactory(float relativeThreshold, float absoluteThreshold);
             void validateMatches(ssrlcv::ptr::value<ssrlcv::Unity<DMatch>> matches); 
-            ssrlcv::ptr::value<ssrlcv::Unity<DMatch>> generateDistanceMatches(int queryID, ssrlcv::ptr::value<Unity<Feature<T>>> queryFeatures, int targetID,
-            ssrlcv::KDTree<T> kdtree);
+            ssrlcv::ptr::value<ssrlcv::Unity<DMatch>> generateDistanceMatches(int queryID, ssrlcv::ptr::value<Unity<Feature<T>>> queryFeatures,
+            int targetID, ssrlcv::KDTree<T> kdtree);
     }; // MatchFactory class
 
     template<typename T>
     __global__ void matchFeaturesKDTree(unsigned int queryImageID, unsigned long numFeaturesQuery, Feature<T>* featuresQuery, 
-    unsigned int targetImageID, KDTree<T>* kdtree, typename KDTree<T>::Node* nodes, ssrlcv::Feature<T>* featuresTree, ssrlcv::PQueueElem* pqueue, DMatch* matches, float absoluteThreshold);
+    unsigned int targetImageID, KDTree<T>* kdtree, typename KDTree<T>::Node* nodes, ssrlcv::Feature<T>* featuresTree, ssrlcv::PQueueElem* pqueue, int* idx, float* dist, DMatch* matches, float absoluteThreshold);
 
 /* ************************************************************************************************************************************************************************************************************************************************************************** */
 
