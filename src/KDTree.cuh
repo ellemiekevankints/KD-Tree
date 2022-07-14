@@ -175,7 +175,7 @@ namespace ssrlcv {
 
         thrust::host_vector<Node> nodes; // all the tree nodes
         ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::Feature<T>>> points; // all the points 
-        vector<int> labels; // the parallel array of labels
+        thrust::host_vector<int> labels; // the parallel array of labels
         int maxDepth;
 
     }; // KD Tree class

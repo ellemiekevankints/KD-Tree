@@ -321,20 +321,16 @@ ssrlcv::Feature<T> feature, int emax, float absoluteThreshold, int k) {
     match.distance = dist[0]; // smallest distance
     int matchIndex = idx[0]; // index of corresponding leaf node/point
 
-    match.invalid = false;
-    match.keyPoints[0].loc = feature.loc; // img1
-    match.keyPoints[1].loc = featuresTree[matchIndex].loc; // img2
-
-    // if (match.distance >= absoluteThreshold) { match.invalid = true; } 
-    // else {
-    //   match.invalid = false;
-    //   match.keyPoints[0].loc = feature.loc; // img1
-    //   match.keyPoints[1].loc = featuresTree[matchIndex].loc; // img2
+    if (match.distance >= absoluteThreshold) { match.invalid = true; } 
+    else {
+      match.invalid = false;
+      match.keyPoints[0].loc = feature.loc; // img1, query features
+      match.keyPoints[1].loc = featuresTree[matchIndex].loc; // img2, kdtree features
       
-    //   // we do not have Image class implemented so no image id
-    //   // match.keyPoints[0].parentId = queryImageID;  
-    //   // match.keyPoints[1].parentId = targetImageID;
-    // }
+      // we do not have Image class implemented so no image id
+      // match.keyPoints[0].parentId = queryImageID;  
+      // match.keyPoints[1].parentId = targetImageID;
+    }
 
     return match;
 } // findNearest
@@ -406,11 +402,6 @@ ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::DMatch>> ssrlcv::MatchFactory<T>::gener
   MemoryState t_origin = d_points->getMemoryState();
   if(t_origin != gpu) d_points->setMemoryState(gpu); 
 
-  // priority queue 
-//   int maxqsize = 1 << 10;
-//   // ssrlcv::PQueueElem pqueue[maxqsize]; 
-//   ssrlcv::ptr::device<ssrlcv::PQueueElem> d_pqueue(1);
-
   // array to hold the matched pairs
   unsigned int numPossibleMatches = queryFeatures->size();
   ssrlcv::ptr::value<ssrlcv::Unity<DMatch>> matches = ssrlcv::ptr::value<ssrlcv::Unity<DMatch>>(nullptr, numPossibleMatches, gpu);
@@ -450,7 +441,7 @@ ssrlcv::KDTree<T>* kdtree, typename ssrlcv::KDTree<T>::Node* nodes, ssrlcv::Feat
     __syncthreads();
     
     DMatch match;
-    int emax = numFeaturesQuery/100; // at most, search half the tree
+    int emax = 100; // at most, search 100 leaf nodes
     match = findNearest(kdtree, nodes, featuresTree, feature, emax, absoluteThreshold); 
     __syncthreads();
 
@@ -528,7 +519,15 @@ ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::Feature<ssrlcv::SIFT_Descriptor>>> gene
 ***************/
 int main() {
 
-    ssrlcv::MatchFactory<ssrlcv::SIFT_Descriptor> matchFactory = ssrlcv::MatchFactory<ssrlcv::SIFT_Descriptor>(0.6f,200.0f*200.0f);
+    /******************************
+    *      VARIABLES TO TUNE      *
+    *                             *
+    * absoluteThreshold = 15000.0 *
+    * reativeThreshold = 0.5      *
+    * emax = 100                  *
+    *******************************/
+
+    ssrlcv::MatchFactory<ssrlcv::SIFT_Descriptor> matchFactory = ssrlcv::MatchFactory<ssrlcv::SIFT_Descriptor>(0.5f,15000.0f);
 
     // generate features
     std::vector<ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::Feature<ssrlcv::SIFT_Descriptor>>>> allFeatures;
@@ -581,7 +580,5 @@ int main() {
     //     } 
     // } 
 
-    //delete img1, img2;
-    //delete dmatches;
     return 0;
 } // main
