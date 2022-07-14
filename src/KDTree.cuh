@@ -60,7 +60,7 @@
 using namespace std;
 
 const int K = 128; // dimensions
-const int N = 20; // number of features
+const int N = 35000; // number of features
 const int MAX_TREE_DEPTH = 32; // upper bound for tree level, equivalent to 4 billion generated features 
 
 namespace ssrlcv {
@@ -208,7 +208,7 @@ namespace ssrlcv {
      * \param k the number of nearest neighbors. by default this value finds the 2 closest features to a given feature point
     */ 
     template<typename T> 
-    __device__ DMatch findNearest(ssrlcv::KDTree<T>* kdtree, typename KDTree<T>::Node* nodes, ssrlcv::Feature<T>* treeFeatures, ssrlcv::PQueueElem* pqueue,
+    __device__ DMatch findNearest(ssrlcv::KDTree<T>* kdtree, typename KDTree<T>::Node* nodes, ssrlcv::Feature<T>* treeFeatures, 
     ssrlcv::Feature<T> queryFeature, int emax, float absoluteThreshold, int k = 1);
 
     template<typename T>    
@@ -226,7 +226,7 @@ namespace ssrlcv {
 
     template<typename T>
     __global__ void matchFeaturesKDTree(unsigned int queryImageID, unsigned long numFeaturesQuery, Feature<T>* featuresQuery, 
-    unsigned int targetImageID, KDTree<T>* kdtree, typename KDTree<T>::Node* nodes, ssrlcv::Feature<T>* featuresTree, ssrlcv::PQueueElem* pqueue, DMatch* matches, float absoluteThreshold);
+    unsigned int targetImageID, KDTree<T>* kdtree, typename KDTree<T>::Node* nodes, ssrlcv::Feature<T>* featuresTree, DMatch* matches, float absoluteThreshold);
 
 /* ************************************************************************************************************************************************************************************************************************************************************************** */
 
