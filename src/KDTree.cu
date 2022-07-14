@@ -407,6 +407,9 @@ ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::DMatch>> ssrlcv::MatchFactory<T>::gener
   int maxqsize = 1 << 10;  
   ssrlcv::ptr::device<ssrlcv::PQueueElem> d_pqueue(maxqsize);
 
+  // auto buffer
+  
+
   // array to hold the matched pairs
   unsigned int numPossibleMatches = queryFeatures->size();
   ssrlcv::ptr::value<ssrlcv::Unity<DMatch>> matches = ssrlcv::ptr::value<ssrlcv::Unity<DMatch>>(nullptr, numPossibleMatches, gpu);
