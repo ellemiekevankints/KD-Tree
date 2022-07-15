@@ -116,7 +116,7 @@ void ssrlcv::KDTree<T>::build(ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::Feature<T
     const int* _labels_data = 0;
 
     if( !_labels.empty() ) {
-        int nlabels = N*K;
+        int nlabels = n*K;
         if ( !(nlabels==n) ) {
             logger.err<<"ERROR: labels size must be equal to points size"<<"\n";
         } 
@@ -337,16 +337,6 @@ ssrlcv::Feature<T> feature, int emax, float absoluteThreshold, int k) {
 
 /* ************************************************************************************************************************************************************************************************************************************************************************** */
 
-/* THINGS TO DO WHEN TRANSFERRING generateDistanceMatch TO SSRLCV
-* 1) change parameters int queryID and targetID back to ssrlcv::ptr::value<ssrlcv::Image> query and target
-* 2) change queryID and targetID back to query->id and target->id in kernel call
-* 3) remove MatchFactory stuff + getGrid() from KDTree.cuh 
-* 4) validateMatches() + MatchFactory() constructor can be deleted from this file, we just need it for testing purposes
-* 5) put generateDistanceMatches() and matchFeaturesKDTree() in MatchFactory.cu + .cuh
-* 6) update the end of findNearest() so DMatch match also stores image id 
-*/
-
-// can delete
 template<typename T>
 ssrlcv::MatchFactory<T>::MatchFactory(float relativeThreshold, float absoluteThreshold) :
 relativeThreshold(relativeThreshold), absoluteThreshold(absoluteThreshold)
@@ -354,7 +344,6 @@ relativeThreshold(relativeThreshold), absoluteThreshold(absoluteThreshold)
   this->seedFeatures = nullptr;
 }
 
-// can delete
 template<typename T>
 void ssrlcv::MatchFactory<T>::validateMatches(ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::DMatch>> matches) {
   MemoryState origin = matches->getMemoryState();
@@ -381,7 +370,6 @@ void ssrlcv::MatchFactory<T>::validateMatches(ssrlcv::ptr::value<ssrlcv::Unity<s
   if (origin != gpu) matches->setMemoryState(origin);
 } // validateMatches
 
-// move to MatchFactory
 template<typename T>
 ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::DMatch>> ssrlcv::MatchFactory<T>::generateDistanceMatches(int queryID, ssrlcv::ptr::value<ssrlcv::Unity<Feature<T>>> queryFeatures, int targetID, ssrlcv::KDTree<T> kdtree) {
 
@@ -429,7 +417,6 @@ ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::DMatch>> ssrlcv::MatchFactory<T>::gener
   return matches;
 } // generateDistanceMatches
 
-// move to MatchFactory
 template<typename T>
 __global__ void ssrlcv::matchFeaturesKDTree(unsigned int queryImageID, unsigned long numFeaturesQuery, ssrlcv::Feature<T>* featuresQuery, unsigned int targetImageID, 
 ssrlcv::KDTree<T>* kdtree, typename ssrlcv::KDTree<T>::Node* nodes, ssrlcv::Feature<T>* featuresTree, ssrlcv::DMatch* matches, float absoluteThreshold) {
@@ -451,6 +438,10 @@ ssrlcv::KDTree<T>* kdtree, typename ssrlcv::KDTree<T>::Node* nodes, ssrlcv::Feat
 } // matchFeaturesKDTree
 
 /* ************************************************************************************************************************************************************************************************************************************************************************** */
+
+/****************
+* DEBUG METHODS *
+*****************/
 
 template<typename T>
 const float2 ssrlcv::KDTree<T>::getPoint(int ptidx, int *label) const {
@@ -492,9 +483,6 @@ void ssrlcv::KDTree<T>::printKDTree() {
     printf("...DONE PRINTING\n\n");
 } // printKDTree
 
-/***************
-* DEBUG METHOD *
-****************/
 ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::Feature<ssrlcv::SIFT_Descriptor>>> generateFeatures() {
 
     ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::Feature<ssrlcv::SIFT_Descriptor>>> features = ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::Feature<ssrlcv::SIFT_Descriptor>>>(nullptr,N,ssrlcv::cpu); 
@@ -517,17 +505,18 @@ ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::Feature<ssrlcv::SIFT_Descriptor>>> gene
 /**************
 * MAIN METHOD *
 ***************/
+
 int main() {
 
     /******************************
     *      VARIABLES TO TUNE      *
     *                             *
     * absoluteThreshold = 15000.0 *
-    * reativeThreshold = 0.5      *
+    * reativeThreshold = 0.6      *
     * emax = 100                  *
     *******************************/
 
-    ssrlcv::MatchFactory<ssrlcv::SIFT_Descriptor> matchFactory = ssrlcv::MatchFactory<ssrlcv::SIFT_Descriptor>(0.5f,15000.0f);
+    ssrlcv::MatchFactory<ssrlcv::SIFT_Descriptor> matchFactory = ssrlcv::MatchFactory<ssrlcv::SIFT_Descriptor>(0.6f,15000.0f);
 
     // generate features
     std::vector<ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::Feature<ssrlcv::SIFT_Descriptor>>>> allFeatures;

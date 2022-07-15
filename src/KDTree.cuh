@@ -69,8 +69,6 @@ namespace ssrlcv {
     * BELOW STRUCTS BELONG IN MATCH FACTORY *
     *****************************************/
 
-    // delete below code when transfering to SSRLCV
-
 /* ************************************************************************************************************************************************************************************************************************************************************************** */
 
     struct uint2_pair{
@@ -191,12 +189,8 @@ namespace ssrlcv {
         float dist; // distance of the query point from the node
         int idx; // current tree position
     };
-  
-    // put the code below in MatchFactroy.cu
-
-/* ************************************************************************************************************************************************************************************************************************************************************************** */
-
-    /*
+    
+    /**
      * \brief finds the k nearest neighbors to a point while looking at emax (at most) leaves
      * \param kdtree the KD-Tree to search through
      * \param nodes the nodes of the KD-Tree
@@ -210,6 +204,8 @@ namespace ssrlcv {
     template<typename T> 
     __device__ DMatch findNearest(ssrlcv::KDTree<T>* kdtree, typename KDTree<T>::Node* nodes, ssrlcv::Feature<T>* treeFeatures, 
     ssrlcv::Feature<T> queryFeature, int emax, float absoluteThreshold, int k = 1);
+
+/* ************************************************************************************************************************************************************************************************************************************************************************** */
 
     template<typename T>    
     class MatchFactory {
@@ -231,10 +227,6 @@ namespace ssrlcv {
 /* ************************************************************************************************************************************************************************************************************************************************************************** */
 
 } // namepsace ssrlcv
-
-
-// delete below code when transfering to SSRLCV
-
 
 /**
 * \brief Method for getting grid and block for a 1D kernel.
