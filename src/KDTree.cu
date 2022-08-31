@@ -378,7 +378,7 @@ ssrlcv::ptr::value<ssrlcv::Unity<ssrlcv::DMatch>> ssrlcv::MatchFactory<T>::gener
   if(q_origin != gpu) queryFeatures->setMemoryState(gpu);
 
   // transfer KD-Tree to GPU
-  ssrlcv::ptr::device<ssrlcv::KDTree<T>> d_kdtree(1);
+  ssrlcv::ptr::device<ssrlcv::KDTree<T>> d_kdtree(1); // ERROR
   CudaSafeCall(cudaMemcpy(d_kdtree.get(),&kdtree,sizeof(kdtree),cudaMemcpyHostToDevice));
    
   // transfer KD-Tree nodes to GPU
