@@ -1,0 +1,12 @@
+1662954138347,Log Generated,out/ssrlcv.log
+1662956603657,error,ERROR: seedDistances should have come from matching a seed image to queryFeatures
+1662956603658,error,
+
+1662956713536,error,ERROR: seedDistances should have come from matching a seed image to queryFeatures
+1662956713536,error,
+
+1662956893150,error,ERROR: seedDistances should have come from matching a seed image to queryFeatures
+1662956893151,error,
+
+1662957371776,warning,WARNING: Attempt to clear null (empty) Unity...action prevented
+

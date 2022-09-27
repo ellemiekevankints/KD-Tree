@@ -60,7 +60,7 @@
 using namespace std;
 
 const int K = 128; // dimensions
-const int N = 35000; // number of features
+const int N = 10; // number of features
 const int MAX_TREE_DEPTH = 32; // upper bound for tree level, equivalent to 4 billion generated features 
 
 namespace ssrlcv {
@@ -204,25 +204,58 @@ namespace ssrlcv {
     template<typename T> 
     __device__ DMatch findNearest(ssrlcv::KDTree<T>* kdtree, typename KDTree<T>::Node* nodes, ssrlcv::Feature<T>* treeFeatures, 
     ssrlcv::Feature<T> queryFeature, int emax, float absoluteThreshold, int k = 1);
+    
+    // search function for matching image WITH seed
+    template<typename T> 
+    __device__ DMatch findNearest(ssrlcv::KDTree<T>* kdtree, typename KDTree<T>::Node* nodes, ssrlcv::Feature<T>* treeFeatures, 
+    ssrlcv::Feature<T> queryFeature, int emax, float relativeThreshold, float absoluteThreshold, float nearestSeed, int k = 1);
+
+    // search function for seed image matching
+    template<typename T> 
+    __device__ float findNearest(ssrlcv::KDTree<T>* kdtree, typename KDTree<T>::Node* nodes, ssrlcv::Feature<T>* treeFeatures, 
+    ssrlcv::Feature<T> queryFeature, int emax, int k = 1);
+    
 
 /* ************************************************************************************************************************************************************************************************************************************************************************** */
 
     template<typename T>    
     class MatchFactory {
         private:
-            ssrlcv::ptr::value<Unity<Feature<T>>> seedFeatures;
+            //ssrlcv::ptr::value<Unity<Feature<T>>> seedFeatures;
         public:
+            ssrlcv::ptr::value<Unity<Feature<T>>> seedFeatures;
             float absoluteThreshold;
             float relativeThreshold;
             MatchFactory(float relativeThreshold, float absoluteThreshold);
+            ssrlcv::ptr::value<ssrlcv::Unity<float>> getSeedDistances(ssrlcv::KDTree<T> kdtree); // NEW FUNCTION
+            void setSeedFeatures(ssrlcv::ptr::value<Unity<Feature<T>>> seedFeatures);
             void validateMatches(ssrlcv::ptr::value<ssrlcv::Unity<DMatch>> matches); 
             ssrlcv::ptr::value<ssrlcv::Unity<DMatch>> generateDistanceMatches(int queryID, ssrlcv::ptr::value<Unity<Feature<T>>> queryFeatures,
-            int targetID, ssrlcv::KDTree<T> kdtree);
+            int targetID, ssrlcv::KDTree<T> kdtree, ssrlcv::ptr::value<ssrlcv::Unity<float>> seedDistances = nullptr);
+
+            /**
+             * \brief Generates distances between a set of features and the closest seedFeatures.
+             * \details This method matches this->seedFeatures and the passed in Unity of Features 
+             * and returns the distance of the closest seedFeature based on the distProtocol method 
+             * of the descriptor. 
+             * \param features features to be matches against this->seedFeatures
+             * \returns ssrlcv::ptr::value<ssrlcv::Unity<float>> an array same length as features with distances associated 
+            */
+            //ssrlcv::ptr::value<ssrlcv::Unity<float>> getSeedDistances(ssrlcv::ptr::value<Unity<Feature<T>>> features);
+
     }; // MatchFactory class
 
     template<typename T>
     __global__ void matchFeaturesKDTree(unsigned int queryImageID, unsigned long numFeaturesQuery, Feature<T>* featuresQuery, 
-    unsigned int targetImageID, KDTree<T>* kdtree, typename KDTree<T>::Node* nodes, ssrlcv::Feature<T>* featuresTree, DMatch* matches, float absoluteThreshold);
+        unsigned int targetImageID, KDTree<T>* kdtree, typename KDTree<T>::Node* nodes, Feature<T>* featuresTree, DMatch* matches, float absoluteThreshold);
+    template<typename T>
+    __global__ void matchFeaturesKDTree(unsigned int queryImageID, unsigned long numFeaturesQuery, Feature<T>* featuresQuery, 
+        unsigned int targetImageID, KDTree<T>* kdtree, typename KDTree<T>::Node* nodes, Feature<T>* featuresTree, DMatch* matches, float* seedDistances, float relativeThreshold, float absoluteThreshold);
+    
+    // seed matching kernel
+    template<typename T>
+    __global__ void getSeedMatchDistances(unsigned long numSeedFeatures, Feature<T>* seedFeatures, 
+        KDTree<T>* kdtree, typename KDTree<T>::Node* nodes, Feature<T>* featuresTree, float* matchDistances);
 
 /* ************************************************************************************************************************************************************************************************************************************************************************** */
 

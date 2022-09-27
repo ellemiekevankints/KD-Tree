@@ -20,8 +20,8 @@ ml GCCcore/6.4.0
 g++ -Wall -pedantic-errors -g -O0 -c src/Logger.hpp -g 
 g++ -Wall -pedantic-errors -g -O0 -c src/Logger.cpp -g -o bin/Logger.o
 nvcc src/Feature.cu -g -include src/Feature.cuh -dc -o bin/Feature.o 
-nvcc src/KDTree.cu -g -include src/KDTree.cuh -o bin/KDTree.cu.o -dc 
-nvcc bin/Feature.o bin/KDTree.cu.o bin/Logger.o -o KDTree
+nvcc src/KDTree.cu -g -include src/KDTree.cuh -o bin/KDTree.cu.o -dc 2> out/errors.txt 
+nvcc bin/Feature.o bin/KDTree.cu.o bin/Logger.o -o KDTree 
 
 ./KDTree
 
